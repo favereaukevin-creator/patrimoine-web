@@ -1,4 +1,4 @@
-# Patrimoine — version web
+# Sillon — version web
 
 Outils de simulation patrimoniale, utilisables directement dans le navigateur :
 https://favereaukevin-creator.github.io/patrimoine-web/
