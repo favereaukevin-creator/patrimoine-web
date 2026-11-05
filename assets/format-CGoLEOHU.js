@@ -1,0 +1,1 @@
+var e=e=>(Number(e)||0).toLocaleString(`fr-FR`,{style:`currency`,currency:`EUR`,maximumFractionDigits:0}),t=e=>(Number(e)||0).toLocaleString(`fr-FR`,{style:`currency`,currency:`EUR`,minimumFractionDigits:2,maximumFractionDigits:2}),n=(e,t=1)=>`${(Number(e)||0).toLocaleString(`fr-FR`,{maximumFractionDigits:t})} %`;export{t as n,n as r,e as t};
