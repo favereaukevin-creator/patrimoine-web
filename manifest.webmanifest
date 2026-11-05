@@ -1,0 +1,22 @@
+{
+  "name": "Sillon — Outils conseil",
+  "short_name": "Sillon",
+  "start_url": "/patrimoine-web/",
+  "scope": "/patrimoine-web/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0F4C5C",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/patrimoine-web/icones/icone-256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "/patrimoine-web/icones/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
