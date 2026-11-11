@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<script type="application/json" id="cowork-artifact-meta">
+{
+  "name": "Outil Budget 3 Comptes",
+  "schemaVersion": 1,
+  "description": "Outil client : catégorisation automatique des relevés de 3 comptes (2 persos + 1 joint). Le client colle ses relevés, l'outil détecte entrées/dépenses, classe par catégorie via un dictionnaire d'enseignes françaises, exclut les virements internes et restitue un tableau catégorie × compte. Export CSV et impression PDF.",
+  "mcpTools": [],
+  "mcpServerNames": []
+}
+</script>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mon budget — 3 comptes</title>
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --plane:#f9f9f7;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good-ink:#006300; --warn:#fab219; --crit:#d03b3b;
+  --warn-wash:rgba(250,178,25,.10); --warn-line:rgba(250,178,25,.40);
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --surface-1:#1a1a19; --plane:#0d0d0d;
+    --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --good-ink:#0ca30c;
+    --warn-wash:rgba(250,178,25,.14); --warn-line:rgba(250,178,25,.45);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:var(--plane); color:var(--ink-1);
+  padding:28px 16px 60px; line-height:1.5;
+}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:1.55rem;font-weight:750;letter-spacing:-.015em}
+.lede{color:var(--ink-2);font-size:.95rem;margin-top:6px;max-width:64ch}
+.card{
+  background:var(--surface-1);border:1px solid var(--ring);
+  border-radius:var(--radius);padding:22px;margin-top:20px;
+}
+.step{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.step-n{
+  width:26px;height:26px;border-radius:50%;background:var(--s1);color:#fff;
+  display:grid;place-items:center;font-size:.8rem;font-weight:700;flex:none;
+}
+.step h2{font-size:1.02rem;font-weight:700;letter-spacing:-.01em}
+.hint{font-size:.86rem;color:var(--ink-2);margin-bottom:14px}
+.hint code{background:var(--plane);padding:1px 5px;border-radius:4px;font-size:.82rem}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tab{
+  border:1px solid var(--ring);background:transparent;color:var(--ink-2);
+  padding:8px 14px;border-radius:999px;cursor:pointer;font:inherit;font-size:.88rem;
+  display:flex;align-items:center;gap:8px;
+}
+.tab:hover{background:var(--plane)}
+.tab[aria-selected="true"]{background:var(--ink-1);color:var(--surface-1);border-color:var(--ink-1);font-weight:600}
+.tab .count{font-size:.78rem;opacity:.75}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+
+.namerow{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.namerow label{font-size:.86rem;color:var(--ink-2)}
+input[type=text],textarea,select{
+  font:inherit;color:var(--ink-1);background:var(--surface-1);
+  border:1px solid var(--axis);border-radius:9px;padding:8px 10px;
+}
+input[type=text]{max-width:280px}
+textarea{width:100%;min-height:190px;resize:vertical;font-size:.85rem;line-height:1.45;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--s1);outline-offset:1px;border-color:var(--s1)}
+
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
+button.primary{background:var(--s1);color:#fff;border:0;border-radius:9px;padding:11px 20px;font:inherit;font-weight:650;cursor:pointer}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--axis);border-radius:9px;padding:10px 16px;font:inherit;cursor:pointer}
+button.ghost:hover{background:var(--plane);color:var(--ink-1)}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-top:20px}
+.tile{background:var(--surface-1);border:1px solid var(--ring);border-radius:var(--radius);padding:18px 20px}
+.tile .lbl{font-size:.74rem;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.tile .val{font-size:1.7rem;font-weight:750;margin-top:6px;letter-spacing:-.02em}
+.tile .sub{font-size:.8rem;color:var(--ink-3);margin-top:3px}
+.pos{color:var(--good-ink)} .neg{color:var(--crit)} .amber{color:var(--warn)}
+
+.tblwrap{overflow-x:auto;margin-top:6px}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{text-align:left;padding:9px 12px;font-size:.72rem;font-weight:650;text-transform:uppercase;
+   letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--grid);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--grid);vertical-align:middle}
+tbody tr:hover{background:var(--plane)}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tfoot td{font-weight:700;border-top:2px solid var(--axis);border-bottom:0}
+.catcell{display:flex;align-items:center;gap:9px}
+.muted{color:var(--ink-3)}
+
+.bar{height:11px;border-radius:0 4px 4px 0;min-width:2px}
+.barcell{width:32%;min-width:120px}
+.stack{display:flex;height:13px;gap:2px}
+.stack span{display:block;border-radius:2px;min-width:2px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 14px;font-size:.83rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+.badge{display:inline-block;font-size:.72rem;font-weight:650;padding:2px 8px;border-radius:999px;
+  background:var(--warn-wash);color:var(--ink-1);border:1px solid var(--warn-line)}
+select.cat,select.sens{font-size:.82rem;padding:5px 7px;border-radius:7px;max-width:230px}
+tr.todo td{background:var(--warn-wash)}
+
+.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.chk{display:flex;align-items:center;gap:7px;font-size:.86rem;color:var(--ink-2);cursor:pointer}
+.hidden{display:none!important}
+.empty{color:var(--ink-3);font-size:.9rem;padding:26px 0;text-align:center}
+.note{font-size:.83rem;color:var(--ink-2);background:var(--plane);border-left:3px solid var(--s1);
+  padding:11px 14px;border-radius:0 8px 8px 0;margin-top:14px}
+.note.amberbar{border-left-color:var(--warn)}
+.foot{margin-top:26px;font-size:.8rem;color:var(--ink-3);text-align:center}
+#tip{position:fixed;pointer-events:none;background:var(--ink-1);color:var(--surface-1);
+  padding:7px 10px;border-radius:7px;font-size:.79rem;z-index:99;opacity:0;transition:opacity .1s;
+  white-space:nowrap;font-variant-numeric:tabular-nums}
+@media print{
+  body{background:#fff;padding:0}
+  .noprint,.btnrow,.filters,.tabs{display:none!important}
+  .card{break-inside:avoid;border-color:#ccc}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Mon budget — 3 comptes</h1>
+  <p class="lede">Collez vos relevés, l'outil classe chaque ligne tout seul. Vous obtenez vos rentrées d'argent par compte, et vos dépenses par catégorie et par compte. Rien à installer, rien à ressaisir.</p>
+
+  <section class="card noprint">
+    <div class="step"><span class="step-n">1</span><h2>Collez vos relevés, un compte à la fois</h2></div>
+    <p class="hint">Ouvrez le PDF, faites <code>⌘A</code> puis <code>⌘C</code> (Windows : <code>Ctrl+A</code> / <code>Ctrl+C</code>) et collez ci-dessous. Un export CSV/Excel de votre banque marche aussi — et donne un résultat plus propre.</p>
+
+    <div class="tabs" role="tablist" id="tabs"></div>
+
+    <div class="namerow">
+      <label for="acctname">Nom de ce compte :</label>
+      <input type="text" id="acctname" maxlength="28">
+    </div>
+
+    <textarea id="paste" spellcheck="false" placeholder="Exemple :&#10;05/07/2026  CARTE 04/07 CARREFOUR MARKET      45,67&#10;06/07/2026  PRLV EDF                        89,20&#10;28/07/2026  VIR RECU SALAIRE                     1 950,00"></textarea>
+
+    <div class="btnrow">
+      <button class="primary" id="go">Analyser mes relevés</button>
+      <button class="ghost" id="demo">Voir un exemple</button>
+      <button class="ghost" id="clearAll">Tout effacer</button>
+      <span id="parsemsg" class="hint" style="margin:0"></span>
+    </div>
+
+    <div class="note"><strong>Le raccourci qui fait gagner le plus de temps :</strong> sur le site de votre banque, chaque compte propose un export <em>CSV / Excel</em> de l'historique. C'est bien plus fiable qu'un copier-coller de PDF, et ça se colle ici directement.</div>
+  </section>
+
+  <div id="results" class="hidden">
+
+    <div class="tiles">
+      <div class="tile"><div class="lbl">Rentrées d'argent</div><div class="val pos" id="kIn">—</div><div class="sub" id="kInSub"></div></div>
+      <div class="tile"><div class="lbl">Dépenses</div><div class="val neg" id="kOut">—</div><div class="sub" id="kOutSub"></div></div>
+      <div class="tile"><div class="lbl">Ce qui reste</div><div class="val" id="kNet">—</div><div class="sub" id="kNetSub"></div></div>
+      <div class="tile"><div class="lbl">À vérifier</div><div class="val" id="kTodo">—</div><div class="sub">lignes que l'outil n'a pas su classer</div></div>
+    </div>
+
+    <section class="card">
+      <div class="step"><span class="step-n">2</span><h2>Les rentrées d'argent — combien, et sur quel compte</h2></div>
+      <div class="tblwrap">
+        <table id="tblIn">
+          <thead><tr><th>Compte</th><th>Nature</th><th class="num">Montant</th><th class="barcell">Part du total</th></tr></thead>
+          <tbody></tbody><tfoot></tfoot>
+        </table>
+      </div>
+      <div class="empty hidden" id="inEmpty">Aucune rentrée détectée. Dans le détail plus bas, passez les lignes concernées en « Rentrée ».</div>
+    </section>
+
+    <section class="card">
+      <div class="step"><span class="step-n">3</span><h2>Les dépenses — combien, quelle catégorie, quel compte</h2></div>
+      <div class="legend" id="legend"></div>
+      <div class="tblwrap">
+        <table id="tblOut">
+          <thead><tr><th>Catégorie</th><th class="num" id="hA"></th><th class="num" id="hB"></th><th class="num" id="hC"></th><th class="num">Total</th><th class="num">%</th><th class="barcell">Répartition par compte</th></tr></thead>
+          <tbody></tbody><tfoot></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="step"><span class="step-n">4</span><h2>Le détail — corrigez ce qui est mal classé</h2></div>
+      <p class="hint">Une ligne mal rangée ? Changez sa catégorie dans la liste déroulante : tous les totaux au-dessus se recalculent aussitôt.</p>
+      <div class="filters noprint">
+        <select id="fAcct"><option value="">Tous les comptes</option></select>
+        <select id="fCat"><option value="">Toutes les catégories</option></select>
+        <button class="ghost" id="fTodo">Voir seulement « À classer »</button>
+        <button class="ghost" id="csv">Télécharger en Excel (CSV)</button>
+        <button class="ghost" id="print">Imprimer / PDF</button>
+      </div>
+      <div class="tblwrap">
+        <table id="tblDet">
+          <thead><tr><th>Date</th><th>Libellé</th><th>Compte</th><th>Sens</th><th>Catégorie</th><th class="num">Montant</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty hidden" id="detEmpty">Aucune ligne pour ce filtre.</div>
+    </section>
+
+    <section class="card">
+      <div class="step"><span class="step-n">5</span><h2>Les virements entre vos propres comptes</h2></div>
+      <label class="chk noprint"><input type="checkbox" id="inclInt"> Les compter comme de vraies rentrées / dépenses</label>
+      <p class="note amberbar" id="intNote"></p>
+    </section>
+
+    <p class="foot">Tout se passe dans votre navigateur : aucune donnée bancaire n'est envoyée nulle part. Fermez la page et tout disparaît.</p>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+/* ================= Modèle ================= */
+const COLORS = ['--s1','--s2','--s3'];
+const INTERNAL = "Virement entre vos comptes";
+const TODO = "À classer";
+
+const accounts = [
+  {id:0, name:"Compte perso 1", raw:""},
+  {id:1, name:"Compte perso 2", raw:""},
+  {id:2, name:"Compte joint",   raw:""}
+];
+let current = 0;
+let rows = [];
+let filterTodo = false;
+
+const CAT_OUT = [
+  "Alimentation / Courses","Restaurants & sorties","Logement & loyer","Énergie & eau",
+  "Télécom & abonnements","Transport & carburant","Véhicule & entretien","Assurances",
+  "Santé","Enfants & scolarité","Shopping & équipement","Loisirs & voyages",
+  "Crédits & prêts","Impôts & taxes","Frais bancaires","Épargne & placements",
+  "Retraits espèces", INTERNAL, TODO
+];
+const CAT_IN = [
+  "Salaire","Prestations sociales (CAF, France Travail…)","Revenus locatifs",
+  "Remboursements", INTERNAL, "Autres revenus"
+];
+
+/* ---- Virements entre comptes du foyer : détectés en premier ---- */
+const RULES_INT = [[INTERNAL,[
+  "compte joint","compte perso","virement interne","vir interne","compte a compte",
+  "entre comptes","vers compte","depuis compte","alimentation compte","vir permanent compte"
+]]];
+
+/* ---- Rentrées ---- */
+const RULES_IN = [
+  ["Salaire",["salaire","bulletin de paie","remuneration","paie ","paye ","virement salaire"]],
+  ["Prestations sociales (CAF, France Travail…)",["caf ","c.a.f","allocation","allocations","pole emploi","france travail","cpam","assurance maladie","msa ","carsat","retraite","pension","agirc","arrco","apl ","prime activite","prime d'activite","aah ","rsa "]],
+  ["Revenus locatifs",["loyer recu","loyer percu","quittance recue","gestion locative","revenu locatif","location recue"]],
+  ["Remboursements",["remboursement","remb ","ristourne","avoir ","annulation achat","rejet prelevement","mutuelle rbt","rbt mutuelle","rbt secu"]],
+  ["Autres revenus",["vir recu","virement recu","vir sepa recu","vir inst recu","virement de","recu de","remise cheque","remise de cheque","remise chq","versement especes","depot especes","versement","interets crediteurs","dividende"]]
+];
+
+/* ---- Dépenses : priorités (lèvent les ambiguïtés) puis dictionnaire ---- */
+const RULES_OUT = [
+  ["Crédits & prêts",["carrefour banque","banque casino","oney bank","volkswagen bank","vw bank","vw credit","psa finance","rci banque","credipar","diac ","toyota financial","ford credit","bmw finance","mercedes benz financial","nissan finance","opel financial"]],
+  ["Énergie & eau",["totalenergies","total energies","total direct energie"]],
+  ["Transport & carburant",["leclerc station","station leclerc","carrefour station","auchan station","intermarche station","station u ","total station","total access","total acc"]],
+  ["Véhicule & entretien",["leclerc auto","carrefour auto","auchan auto"]],
+
+  ["Alimentation / Courses",["carrefour","leclerc","intermarche","super u","hyper u","u express","auchan","lidl","aldi","casino shop","petit casino","monoprix","monop","franprix","picard","grand frais","biocoop","naturalia","netto","cora","spar ","vival","proxi ","supermarche","superette","epicerie","boucherie","boulangerie","patisserie","fromagerie","primeur","poissonnerie","chronodrive","drive ","la vie claire","day by day","thiriet","toupargel","colruyt","bi1 ","match ","maskr","mask'r","marche couvert","halles"]],
+  ["Restaurants & sorties",["mcdonald","mc donald","mcdo","burger king","kfc","quick ","subway","starbucks","brioche doree","columbus cafe","o'tacos","o tacos","five guys","domino","pizza","sushi","restaurant","brasserie","bistrot","creperie","uber eats","ubereats","deliveroo","just eat","frichti","snack","kebab","taverne","cafeteria","pub ","bar "]],
+  ["Logement & loyer",["loyer","quittance","syndic","copropriete","foncia","nexity","citya","square habitat","agence immo","immobiliere","charges locatives","depot de garantie","garantie loyer","gestion immo"]],
+  ["Énergie & eau",["edf","engie","eni ","vattenfall","iberdrola","ekwateur","mint energie","ohm energie","planete oui","veolia","suez","saur ","eau du","service des eaux","primagaz","butagaz","antargaz","fioul","grdf","enedis","syndicat des eaux"]],
+  ["Télécom & abonnements",["orange","sfr","bouygues","free mobile","free ","sosh","red by sfr","prixtel","nrj mobile","la poste mobile","netflix","spotify","deezer","canal+","canal plus","canalplus","disney","prime video","amazon prime","apple.com/bill","itunes","apple music","icloud","google one","google storage","microsoft","office 365","adobe","dropbox","molotov","dazn","rmc sport","audible","abonnement"]],
+  ["Transport & carburant",["station service","station-service","esso","shell","avia ","agip","carburant","gazole","sp95","sp98","essence","peage","vinci autoroute","aprr","sanef","asf ","ulys","escota","cofiroute","sncf","ouigo","tgv ","trainline","blablacar","flixbus","ratp","navigo","tisseo","transdev","keolis","uber","bolt ","taxi","parking","indigo park","effia","q-park","onepark","velib","autoroute","aeroport","ryanair","easyjet","transavia","air france","vueling","bp "]],
+  ["Véhicule & entretien",["norauto","feu vert","midas","speedy","roady","euromaster","point s","garage","carrosserie","controle technique","dekra","autosur","securitest","carglass","vulco","first stop","lavage auto","pieces auto","oscaro","mister auto","concession","peugeot","renault","citroen","volkswagen","toyota","dacia"]],
+  ["Assurances",["axa","maif","macif","matmut","maaf","gmf ","allianz","groupama","mma ","generali","april ","swisslife","swiss life","direct assurance","l'olivier","luko","lemonade","acheel","assurance","mutuelle","harmonie","malakoff","ag2r","alan ","apivia","mgen","smeno","heyme","gan "]],
+  ["Santé",["pharmacie","pharma","docteur","medecin","cabinet medical","laboratoire","biogroup","cerballiance","synlab","dentiste","orthodont","opticien","krys","afflelou","optic 2000","generale d'optique","optical center","kine","osteopathe","hopital","clinique","radiologie","infirmier","psychologue","therapeute","audioprothes","ameli","dr "]],
+  ["Enfants & scolarité",["creche","nounou","assistante maternelle","assistant maternel","pajemploi","garderie","periscolaire","cantine","restauration scolaire","ecole","college","lycee","universite","crous","centre de loisirs","alsh","garde enfant","scolarite","fournitures scolaires","conservatoire","trois momes"]],
+  ["Shopping & équipement",["amazon","zalando","shein","temu","aliexpress","vinted","kiabi","primark","h&m","zara","c&a","gemo","la halle","celio","jules ","undiz","etam","decathlon","intersport","go sport","nike","adidas","courir","foot locker","ikea","conforama","maisons du monde","alinea","gifi","centrakor","foir'fouille","stokomani","noz ","leroy merlin","castorama","bricomarche","bricorama","brico depot","mr bricolage","weldom","jardiland","truffaut","gamm vert","cdiscount","fnac","darty","boulanger","ldlc","materiel.net","sephora","nocibe","marionnaud","yves rocher","normal ","kruidvat","bijouterie","histoire d'or","maty","action ","but "]],
+  ["Loisirs & voyages",["cinema","ugc","pathe","gaumont","cgr ","kinepolis","mk2","booking","airbnb","expedia","hotel","ibis","campanile","b&b hotel","camping","center parc","pierre & vacances","belambra","club med","disneyland","parc asterix","puy du fou","zoo ","aquarium","musee","basic fit","basic-fit","fitness park","keepcool","neoness","salle de sport","piscine","patinoire","bowling","laser game","escape game","fdj","pmu","francaise des jeux","steam","playstation","nintendo","xbox","epic games","ticketmaster","fnac spectacles","billetreduc","concert","festival","theatre","voyage","tui "]],
+  ["Crédits & prêts",["pret ","credit conso","credit immo","credit auto","echeance pret","mensualite","cofidis","cetelem","sofinco","younited","floa","oney","franfinance","cofinoga","volkswagen bank","vw bank","psa finance","rci banque","diac ","credipar","amortissement","remboursement pret","echeance"]],
+  ["Impôts & taxes",["dgfip","impots","tresor public","finances publiques","taxe fonciere","taxe habitation","prelevement a la source","urssaf","redevance","amende","antai","contravention","ordures menageres","teom","cotisation fonciere"]],
+  ["Frais bancaires",["cotisation carte","cotisation trimestrielle","cotisation mensuelle","frais bancaires","frais de tenue","tenue de compte","agios","commission d'intervention","commission interv","frais de rejet","frais d'incident","offre groupee","frais virement","cotisation compte","moyens de paiement","frais opposition"]],
+  ["Épargne & placements",["livret a","livret bleu","ldds","livret de developpement","pel ","cel ","pea ","assurance vie","assurance-vie","contrat capitalisation","linxea","spirica","suravenir","corum","scpi","plan epargne","versement programme","epargne","yomoni","nalo","ramify","trade republic","degiro","etoro","binance","coinbase","kraken","bitpanda","per "]],
+  ["Retraits espèces",["retrait","dab ","gab ","distributeur"]]
+];
+
+/* ================= Utilitaires ================= */
+const eur = n => n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}) + " €";
+const norm = s => String(s).toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/[  \t]/g,' ').replace(/\s+/g,' ');
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function matchRules(label, rules){
+  const l = ' ' + norm(label) + ' ';
+  for(const [cat, kws] of rules){
+    for(const kw of kws){
+      const k = norm(kw);
+      const wordBoundary = /\s$/.test(kw) || k.trim().length <= 4;
+      if(wordBoundary){ if(l.indexOf(' '+k.trim()+' ') !== -1) return cat; }
+      else if(l.indexOf(k.trim()) !== -1) return cat;
+    }
+  }
+  return null;
+}
+
+function parseAmount(tok){
+  const neg = /^\s*-/.test(tok) || /-\s*$/.test(tok);
+  const t = tok.replace(/[-\s  €]/g,'');
+  const i = Math.max(t.lastIndexOf(','), t.lastIndexOf('.'));
+  if(i < 0) return null;
+  const ent = t.slice(0,i).replace(/[.,\s]/g,'');
+  const dec = t.slice(i+1);
+  const v = parseFloat((ent||'0') + '.' + dec);
+  if(!isFinite(v)) return null;
+  return neg ? -v : v;
+}
+
+const SKIP = /(ancien solde|nouveau solde|solde crediteur|solde debiteur|solde au |solde en |solde precedent|total des |totaux|report a nouveau|releve de compte|sous-total|page \d)/;
+// Dates : masquees avant la recherche des montants (memes longueurs => index alignes)
+const DATE_ANY   = /\b\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\b/g;
+const DATE_SLASH = /\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b|\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g;
+// Montants : groupe 1 = caractere de gauche (jamais un chiffre), groupe 2 = le montant
+const AMT_COMMA = /(^|[^\d.,])(-?\s?(?:\d{1,3}(?:[\s\u00a0\u202f.]\d{3})+|\d+),\d{2}(?!\d)\s?-?)/g;
+const AMT_DOT   = /(^|[^\d.,])(-?\s?(?:\d{1,3}(?:[\s\u00a0\u202f,]\d{3})+|\d+)\.\d{2}(?!\d)\s?-?)/g;
+
+function parseBlock(raw, acctId){
+  const out = [];
+  let ignored = 0;
+  // Si aucun montant à virgule dans tout le bloc, on bascule sur le point décimal.
+  const useDot = !/\d,\d{2}(?!\d)/.test(raw);
+  const AMT  = useDot ? AMT_DOT : AMT_COMMA;
+  const DATE = useDot ? DATE_SLASH : DATE_ANY;
+
+  raw.split(/\r?\n/).forEach(line=>{
+    const clean = line.replace(/\t/g,'  ').trim();
+    if(!clean) return;
+    if(SKIP.test(norm(clean))) return;
+
+    let firstDate = null, firstDateEnd = 0;
+    DATE.lastIndex = 0;
+    const masked = clean.replace(DATE, (m, off)=>{
+      if(firstDate === null && off <= 2){ firstDate = m; firstDateEnd = off + m.length; }
+      return ' '.repeat(m.length);
+    });
+
+    AMT.lastIndex = 0;
+    const m = AMT.exec(masked);
+    if(!m){ if(/[a-zA-Zà-ÿ]{3}/.test(clean)) ignored++; return; }
+
+    const start = m.index + m[1].length;
+    const amt = parseAmount(m[2]);
+    if(amt === null || amt === 0) return;
+
+    const plus = /\+\s?$/.test(clean.slice(0, start));
+    let label = clean.slice(firstDateEnd, start)
+      .replace(/^[\s\-–—:;|+]+/,'').replace(/[\s\-–—:;|+]+$/,'').replace(/\s{2,}/g,' ').trim();
+    if(label.length < 2) label = "(sans libellé)";
+
+    const catInt = matchRules(label, RULES_INT);
+    const catIn  = matchRules(label, RULES_IN);
+    let sens, cat;
+    if(amt < 0) sens = 'out';
+    else if(plus || catIn) sens = 'in';
+    else sens = 'out';
+
+    if(catInt) cat = INTERNAL;
+    else if(sens === 'in') cat = catIn || "Autres revenus";
+    else cat = matchRules(label, RULES_OUT) || TODO;
+
+    out.push({date: firstDate || "", label, amount: Math.abs(amt), sens, cat, acct: acctId});
+  });
+  return {out, ignored};
+}
+
+/* ================= Onglets ================= */
+function renderTabs(){
+  const t = document.getElementById('tabs');
+  t.innerHTML = '';
+  accounts.forEach(a=>{
+    const b = document.createElement('button');
+    b.className='tab'; b.type='button'; b.setAttribute('role','tab');
+    b.setAttribute('aria-selected', a.id===current ? 'true':'false');
+    const n = rows.filter(r=>r.acct===a.id).length;
+    b.innerHTML = `<span class="dot" style="background:var(${COLORS[a.id]})"></span>${esc(a.name)}` +
+      (n ? ` <span class="count">· ${n} lignes</span>` : (a.raw.trim() ? ' <span class="count">· prêt</span>' : ''));
+    b.onclick = ()=>{ saveCurrent(); current = a.id; syncEditor(); renderTabs(); };
+    t.appendChild(b);
+  });
+}
+function saveCurrent(){
+  accounts[current].raw = document.getElementById('paste').value;
+  const nm = document.getElementById('acctname').value.trim();
+  accounts[current].name = nm || ('Compte ' + (current+1));
+}
+function syncEditor(){
+  document.getElementById('paste').value = accounts[current].raw;
+  document.getElementById('acctname').value = accounts[current].name;
+}
+document.getElementById('acctname').addEventListener('input', e=>{
+  accounts[current].name = e.target.value.trim() || ('Compte ' + (current+1));
+  renderTabs();
+  if(rows.length) renderAll();
+});
+
+/* ================= Analyse ================= */
+document.getElementById('go').onclick = ()=>{
+  saveCurrent();
+  rows = []; let ignored = 0;
+  accounts.forEach(a=>{
+    if(!a.raw.trim()) return;
+    const r = parseBlock(a.raw, a.id);
+    rows = rows.concat(r.out); ignored += r.ignored;
+  });
+  const msg = document.getElementById('parsemsg');
+  if(!rows.length){
+    msg.textContent = "Aucune opération reconnue. Vérifiez que chaque ligne contient un montant du type 45,67.";
+    document.getElementById('results').classList.add('hidden');
+    renderTabs(); return;
+  }
+  msg.textContent = rows.length + " opérations lues" + (ignored ? " · " + ignored + " lignes sans montant ignorées" : "");
+  document.getElementById('results').classList.remove('hidden');
+  renderTabs(); renderAll();
+  document.getElementById('results').scrollIntoView({behavior:'smooth'});
+};
+
+document.getElementById('clearAll').onclick = ()=>{
+  accounts.forEach(a=>a.raw='');
+  rows=[]; syncEditor(); renderTabs();
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('parsemsg').textContent='';
+};
+
+document.getElementById('demo').onclick = ()=>{
+  accounts[0].name="Perso — Camille"; accounts[1].name="Perso — Julien"; accounts[2].name="Compte joint";
+  accounts[0].raw = `01/07/2026 VIR RECU SALAIRE ENTREPRISE MARTIN 2 150,00
+03/07/2026 CARTE 02/07 SEPHORA PARIS 62,90
+05/07/2026 PRLV BASIC FIT 29,99
+08/07/2026 CARTE 07/07 SNCF CONNECT 78,00
+12/07/2026 RETRAIT DAB LA POSTE 60,00
+15/07/2026 VIR EMIS VERS COMPTE JOINT 900,00
+19/07/2026 CARTE 18/07 PHARMACIE DU CENTRE 18,40
+24/07/2026 CARTE 23/07 ZARA FRANCE 89,95
+26/07/2026 CARTE 25/07 SUSHI SHOP LYON 31,50`;
+  accounts[1].raw = `02/07/2026 VIR RECU SALAIRE SOCIETE DUPONT 2 480,00
+04/07/2026 PRLV SPOTIFY 11,99
+06/07/2026 CARTE 05/07 STATION AVIA BRON 71,30
+10/07/2026 PRLV MATMUT ASSURANCE AUTO 46,20
+14/07/2026 VIR EMIS VERS COMPTE JOINT 1 100,00
+17/07/2026 CARTE 16/07 DECATHLON 54,00
+22/07/2026 CARTE 21/07 UBER EATS 27,80
+26/07/2026 CARTE 25/07 AMAZON EU 43,20
+28/07/2026 PRLV COFIDIS PRET CONSO 189,00`;
+  accounts[2].raw = `01/07/2026 PRLV LOYER AGENCE IMMOBILIERE 820,00
+02/07/2026 VIR RECU DEPUIS COMPTE PERSO CAMILLE 900,00
+03/07/2026 VIR RECU DEPUIS COMPTE PERSO JULIEN 1 100,00
+04/07/2026 CARTE 03/07 CARREFOUR MARKET 112,45
+06/07/2026 PRLV EDF 94,60
+07/07/2026 PRLV ORANGE 52,99
+09/07/2026 CARTE 08/07 LIDL 68,20
+11/07/2026 PRLV CRECHE LES PETITS PAS 367,27
+13/07/2026 CARTE 12/07 INTERMARCHE 87,15
+16/07/2026 CARTE 15/07 LEROY MERLIN 143,00
+18/07/2026 PRLV CANAL PLUS 34,69
+20/07/2026 CARTE 19/07 AUCHAN 96,80
+23/07/2026 CARTE 22/07 RESTAURANT LE PETIT JARDIN 74,50
+25/07/2026 PRLV VOLKSWAGEN BANK 337,59
+27/07/2026 VIR PERMANENT LIVRET A 250,00
+29/07/2026 CARTE 28/07 STATION ESSO 63,40
+30/07/2026 CARTE 29/07 BOULANGERIE MARIE 12,60
+31/07/2026 PRLV VEOLIA EAU 41,80`;
+  current = 0; syncEditor(); renderTabs();
+  document.getElementById('go').click();
+};
+
+/* ================= Rendu ================= */
+const inclInt = () => document.getElementById('inclInt').checked;
+const kept = () => inclInt() ? rows : rows.filter(r=>r.cat !== INTERNAL);
+
+function renderAll(){ renderKPI(); renderIn(); renderOut(); renderDetail(); renderInt(); }
+
+function renderKPI(){
+  const R = kept();
+  const tin  = R.filter(r=>r.sens==='in').reduce((s,r)=>s+r.amount,0);
+  const tout = R.filter(r=>r.sens==='out').reduce((s,r)=>s+r.amount,0);
+  const todo = rows.filter(r=>r.cat===TODO).length;
+  document.getElementById('kIn').textContent  = eur(tin);
+  document.getElementById('kInSub').textContent  = R.filter(r=>r.sens==='in').length + " opérations";
+  document.getElementById('kOut').textContent = eur(tout);
+  document.getElementById('kOutSub').textContent = R.filter(r=>r.sens==='out').length + " opérations";
+  const net = tin - tout;
+  const kn = document.getElementById('kNet');
+  kn.textContent = (net>=0 ? '+' : '−') + eur(Math.abs(net));
+  kn.className = 'val ' + (net>=0 ? 'pos' : 'neg');
+  document.getElementById('kNetSub').textContent = tin>0 ? Math.round(net/tin*100) + " % des rentrées" : "";
+  const kt = document.getElementById('kTodo');
+  kt.textContent = todo;
+  kt.className = 'val ' + (todo ? 'amber' : 'pos');
+}
+
+function renderIn(){
+  const tb = document.querySelector('#tblIn tbody'), tf = document.querySelector('#tblIn tfoot');
+  tb.innerHTML=''; tf.innerHTML='';
+  const list = kept().filter(r=>r.sens==='in');
+  document.getElementById('inEmpty').classList.toggle('hidden', list.length>0);
+  const total = list.reduce((s,r)=>s+r.amount,0);
+  const map = new Map();
+  list.forEach(r=>{ const k = r.acct+'||'+r.cat; map.set(k,(map.get(k)||0)+r.amount); });
+  [...map.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+    const p = k.split('||'), ai = +p[0], cat = p[1];
+    const pct = total ? v/total*100 : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td><span class="catcell"><span class="dot" style="background:var(${COLORS[ai]})"></span>${esc(accounts[ai].name)}</span></td>`+
+      `<td>${esc(cat)}</td><td class="num">${eur(v)}</td>`+
+      `<td class="barcell"><div class="bar" style="width:${Math.max(pct,1.5)}%;background:var(${COLORS[ai]})" data-tip="${esc(accounts[ai].name)} · ${esc(cat)} · ${eur(v)} (${pct.toFixed(0)} %)"></div></td>`;
+    tb.appendChild(tr);
+  });
+  if(list.length) tf.innerHTML = `<tr><td colspan="2">Total des rentrées</td><td class="num">${eur(total)}</td><td></td></tr>`;
+}
+
+function renderOut(){
+  const list = kept().filter(r=>r.sens==='out');
+  const total = list.reduce((s,r)=>s+r.amount,0);
+  ['hA','hB','hC'].forEach((id,i)=> document.getElementById(id).textContent = accounts[i].name);
+  document.getElementById('legend').innerHTML = accounts.map((a,i)=>
+    `<span><i style="background:var(${COLORS[i]})"></i>${esc(a.name)}</span>`).join('');
+
+  const agg = new Map();
+  list.forEach(r=>{
+    if(!agg.has(r.cat)) agg.set(r.cat,[0,0,0]);
+    agg.get(r.cat)[r.acct] += r.amount;
+  });
+  const arr = [...agg.entries()].map(([cat,v])=>({cat,v,t:v[0]+v[1]+v[2]}))
+    .sort((a,b)=> (a.cat===TODO) - (b.cat===TODO) || b.t - a.t);
+  const max = Math.max(1, ...arr.map(x=>x.t));
+
+  const tb = document.querySelector('#tblOut tbody'); tb.innerHTML='';
+  arr.forEach(x=>{
+    const tr = document.createElement('tr');
+    if(x.cat===TODO) tr.className='todo';
+    const seg = x.v.map((v,i)=> v>0
+      ? `<span style="background:var(${COLORS[i]});width:${v/max*100}%" data-tip="${esc(accounts[i].name)} · ${esc(x.cat)} · ${eur(v)}"></span>` : '').join('');
+    tr.innerHTML =
+      `<td>${x.cat===TODO ? '<span class="badge">À classer</span>' : esc(x.cat)}</td>` +
+      x.v.map(v=> `<td class="num">${v ? eur(v) : '<span class="muted">—</span>'}</td>`).join('') +
+      `<td class="num"><strong>${eur(x.t)}</strong></td>` +
+      `<td class="num">${total ? (x.t/total*100).toFixed(0) : 0} %</td>` +
+      `<td class="barcell"><div class="stack">${seg}</div></td>`;
+    tb.appendChild(tr);
+  });
+  const cols = [0,1,2].map(i=> list.filter(r=>r.acct===i).reduce((s,r)=>s+r.amount,0));
+  document.querySelector('#tblOut tfoot').innerHTML =
+    `<tr><td>Total des dépenses</td>${cols.map(c=>`<td class="num">${eur(c)}</td>`).join('')}<td class="num">${eur(total)}</td><td class="num">${total?100:0} %</td><td></td></tr>`;
+}
+
+function renderInt(){
+  const list = rows.filter(r=>r.cat===INTERNAL);
+  const t = list.reduce((s,r)=>s+r.amount,0);
+  const n = document.getElementById('intNote');
+  if(!list.length){
+    n.textContent = "Aucun virement entre vos comptes détecté. Si vous vous virez de l'argent d'un compte perso vers le compte joint, repérez ces lignes dans le détail ci-dessus et passez-les en « Virement entre vos comptes » — sinon la somme est comptée deux fois : en dépense d'un côté, en rentrée de l'autre.";
+  } else {
+    n.innerHTML = `<strong>${list.length} opérations, ${eur(t)} au total.</strong> Ce n'est ni une vraie rentrée ni une vraie dépense : c'est votre argent qui change de poche. Il est donc <strong>exclu des totaux</strong> par défaut, pour ne pas le compter deux fois.`;
+  }
+}
+
+function renderDetail(){
+  const fa = document.getElementById('fAcct'), fc = document.getElementById('fCat');
+  if(fa.options.length === 1) accounts.forEach(a=> fa.add(new Option(a.name, a.id)));
+  else [...fa.options].forEach((o,i)=>{ if(i>0) o.text = accounts[+o.value].name; });
+  if(fc.options.length === 1){
+    const g1 = document.createElement('optgroup'); g1.label = 'Dépenses';
+    CAT_OUT.forEach(c=> g1.appendChild(new Option(c,c)));
+    const g2 = document.createElement('optgroup'); g2.label = 'Rentrées';
+    CAT_IN.forEach(c=> g2.appendChild(new Option(c,c)));
+    fc.appendChild(g1); fc.appendChild(g2);
+  }
+  const tb = document.querySelector('#tblDet tbody'); tb.innerHTML='';
+  const av = fa.value, cv = fc.value;
+  let shown = 0;
+  rows.forEach((r,idx)=>{
+    if(av !== '' && r.acct !== +av) return;
+    if(cv !== '' && r.cat !== cv) return;
+    if(filterTodo && r.cat !== TODO) return;
+    shown++;
+    const tr = document.createElement('tr');
+    if(r.cat === TODO) tr.className = 'todo';
+    const opts = (r.sens==='in' ? CAT_IN : CAT_OUT).map(c=>
+      `<option${c===r.cat ? ' selected' : ''}>${esc(c)}</option>`).join('');
+    tr.innerHTML =
+      `<td style="white-space:nowrap" class="muted">${esc(r.date||'—')}</td>`+
+      `<td>${esc(r.label)}</td>`+
+      `<td><span class="catcell"><span class="dot" style="background:var(${COLORS[r.acct]})"></span>${esc(accounts[r.acct].name)}</span></td>`+
+      `<td><select class="sens" data-i="${idx}">`+
+        `<option value="out"${r.sens==='out'?' selected':''}>Dépense</option>`+
+        `<option value="in"${r.sens==='in'?' selected':''}>Rentrée</option></select></td>`+
+      `<td><select class="cat" data-i="${idx}">${opts}</select></td>`+
+      `<td class="num" style="color:${r.sens==='in'?'var(--good-ink)':'var(--ink-1)'}">${r.sens==='in'?'+':'−'}${eur(r.amount)}</td>`;
+    tb.appendChild(tr);
+  });
+  document.getElementById('detEmpty').classList.toggle('hidden', shown>0);
+
+  tb.querySelectorAll('select.cat').forEach(s=> s.onchange = e=>{
+    rows[+e.target.dataset.i].cat = e.target.value; renderAll();
+  });
+  tb.querySelectorAll('select.sens').forEach(s=> s.onchange = e=>{
+    const r = rows[+e.target.dataset.i];
+    r.sens = e.target.value;
+    if(r.cat !== INTERNAL){
+      r.cat = r.sens === 'in'
+        ? (matchRules(r.label, RULES_IN) || "Autres revenus")
+        : (matchRules(r.label, RULES_OUT) || TODO);
+    }
+    renderAll();
+  });
+}
+
+document.getElementById('fAcct').onchange = renderDetail;
+document.getElementById('fCat').onchange  = renderDetail;
+document.getElementById('inclInt').onchange = renderAll;
+document.getElementById('fTodo').onclick = e=>{
+  filterTodo = !filterTodo;
+  e.target.textContent = filterTodo ? "Voir toutes les lignes" : "Voir seulement « À classer »";
+  renderDetail();
+};
+document.getElementById('print').onclick = ()=> window.print();
+document.getElementById('csv').onclick = ()=>{
+  const q = s => '"' + String(s).replace(/"/g,'""') + '"';
+  const lines = [["Date","Libelle","Compte","Sens","Categorie","Montant"].map(q).join(';')];
+  rows.forEach(r=> lines.push([
+    r.date, r.label, accounts[r.acct].name,
+    r.sens==='in' ? 'Rentree' : 'Depense', r.cat,
+    (r.sens==='in' ? '' : '-') + r.amount.toFixed(2).replace('.',',')
+  ].map(q).join(';')));
+  const blob = new Blob(["﻿" + lines.join("\r\n")], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'budget-3-comptes.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+};
+
+/* Tooltip */
+const tip = document.getElementById('tip');
+document.addEventListener('mouseover', e=>{
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if(!t) return;
+  tip.textContent = t.dataset.tip; tip.style.opacity = 1;
+});
+document.addEventListener('mousemove', e=>{
+  if(tip.style.opacity === '1'){
+    tip.style.left = Math.min(e.clientX+14, innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top  = (e.clientY + 16) + 'px';
+  }
+});
+document.addEventListener('mouseout', e=>{
+  if(e.target.closest && e.target.closest('[data-tip]')) tip.style.opacity = 0;
+});
+
+renderTabs(); syncEditor();
+</script>
+</body>
+</html>
