@@ -1,0 +1,1 @@
+import{E as e,w as t}from"./theme-531xOt7I.js";function n(n){let r=2.1;n.addImage({data:t,x:12.73-r*e,y:.45,w:r*e,h:r,altText:`Accompagnement patrimonial`})}export{n as t};
